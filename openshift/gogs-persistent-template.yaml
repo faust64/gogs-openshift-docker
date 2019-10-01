@@ -131,7 +131,7 @@ objects:
     to:
       name: ${APPLICATION_NAME}
     tls:
-      insecureEdgeTerminationPolicy: Allow
+      insecureEdgeTerminationPolicy: Redirect
       termination: edge
 - kind: DeploymentConfig
   apiVersion: v1
