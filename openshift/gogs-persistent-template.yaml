@@ -6,21 +6,14 @@ metadata:
     tags: instant-app,gogs,go,golang
   name: gogs
 objects:
-- kind: ServiceAccount
-  apiVersion: v1
-  metadata:
-    creationTimestamp: null
-    labels:
-      app: ${APPLICATION_NAME}
-    name: ${APPLICATION_NAME}
 - kind: Service
   apiVersion: v1
   metadata:
     annotations:
       description: Exposes the database server
-    name: ${APPLICATION_NAME}-postgresql
     labels:
       app: ${APPLICATION_NAME}
+    name: ${APPLICATION_NAME}-postgresql
   spec:
     ports:
     - name: postgresql
@@ -33,9 +26,9 @@ objects:
   metadata:
     annotations:
       description: Defines how to deploy the database
-    name: ${APPLICATION_NAME}-postgresql
     labels:
       app: ${APPLICATION_NAME}
+    name: ${APPLICATION_NAME}-postgresql
   spec:
     replicas: 1
     selector:
@@ -48,7 +41,6 @@ objects:
           name: ${APPLICATION_NAME}-postgresql
         name: ${APPLICATION_NAME}-postgresql
       spec:
-        serviceAccountName: ${APPLICATION_NAME}
         containers:
         - env:
           - name: POSTGRESQL_USER
@@ -65,12 +57,12 @@ objects:
             value: ${DATABASE_ADMIN_PASSWORD}
           image: ' '
           livenessProbe:
+            failureThreshold: 10
             initialDelaySeconds: 30
+            periodSeconds: 20
             tcpSocket:
               port: 5432
             timeoutSeconds: 1
-            failureThreshold: 10
-            periodSeconds: 20
           name: postgresql
           ports:
           - containerPort: 5432
@@ -81,17 +73,18 @@ objects:
               - -i
               - -c
               - psql -h 127.0.0.1 -U ${POSTGRESQL_USER} -q -d ${POSTGRESQL_DATABASE} -c 'SELECT 1'
+            failureThreshold: 10
             initialDelaySeconds: 30
             timeoutSeconds: 1
-            failureThreshold: 10
           resources:
             limits:
+              cpu: 100m
               memory: 512Mi
           volumeMounts:
           - mountPath: /var/lib/pgsql/data
-            name: gogs-postgres-data
+            name: data
         volumes:
-        - name: gogs-postgres-data
+        - name: data
           persistentVolumeClaim:
             claimName: gogs-postgres-data
     triggers:
@@ -122,11 +115,8 @@ objects:
       targetPort: 3000
     selector:
       app: ${APPLICATION_NAME}
-      deploymentconfig: ${APPLICATION_NAME}
     sessionAffinity: None
     type: ClusterIP
-  status:
-    loadBalancer: {}
 - kind: Route
   apiVersion: v1
   id: ${APPLICATION_NAME}-http
@@ -140,6 +130,9 @@ objects:
     host: ${HOSTNAME}
     to:
       name: ${APPLICATION_NAME}
+    tls:
+      insecureEdgeTerminationPolicy: Allow
+      termination: edge
 - kind: DeploymentConfig
   apiVersion: v1
   metadata:
@@ -150,67 +143,77 @@ objects:
     replicas: 1
     selector:
       app: ${APPLICATION_NAME}
-      deploymentconfig: ${APPLICATION_NAME}
     strategy:
-      resources: {}
       rollingParams:
         intervalSeconds: 1
         maxSurge: 25%
         maxUnavailable: 25%
         timeoutSeconds: 600
         updatePeriodSeconds: 1
-      type: Rolling
+      type: Recreate
     template:
       metadata:
-        creationTimestamp: null
         labels:
           app: ${APPLICATION_NAME}
-          deploymentconfig: ${APPLICATION_NAME}
       spec:
-        serviceAccountName: ${APPLICATION_NAME}
+        initContainers:
+        - command:
+          - /bin/sh
+          - '-c'
+          - 'if test "${PROXY_HOST}"; then echo [http] && echo proxy = http://${PROXY_HOST}:${PROXY_PORT} && echo [https] && echo proxy = http://${PROXY_HOST}:${PROXY_PORT} >>/home/gogs/.gitconfig; fi'
+          image: " "
+          imagePullPolicy: IfNotPresent
+          name: init
+          volumeMounts:
+          - name: home
+            mountPath: /home/gogs
         containers:
         - image: " "
           imagePullPolicy: Always
-          name: ${APPLICATION_NAME}
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 3000
+              scheme: HTTP
+            initialDelaySeconds: 40
+            timeoutSeconds: 1
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 10
+          name: gogs
           ports:
           - containerPort: 3000
             protocol: TCP
-          resources: {}
-          terminationMessagePath: /dev/termination-log
-          volumeMounts:
-          - name: gogs-data
-            mountPath: /opt/gogs/data
-          - name: gogs-config
-            mountPath: /etc/gogs/conf
           readinessProbe:
-              httpGet:
-                path: /
-                port: 3000
-                scheme: HTTP
-              initialDelaySeconds: 40
-              timeoutSeconds: 1
-              periodSeconds: 20
-              successThreshold: 1
-              failureThreshold: 10
-          livenessProbe:
-              httpGet:
-                path: /
-                port: 3000
-                scheme: HTTP
-              initialDelaySeconds: 40
-              timeoutSeconds: 1
-              periodSeconds: 10
-              successThreshold: 1
-              failureThreshold: 10
+            httpGet:
+              path: /
+              port: 3000
+              scheme: HTTP
+            initialDelaySeconds: 40
+            timeoutSeconds: 1
+            periodSeconds: 20
+            successThreshold: 1
+            failureThreshold: 10
+          resources:
+            requests:
+              cpu: 200m
+              memory: 768Mi
+          volumeMounts:
+          - name: home
+            mountPath: /home/gogs
+          - name: data
+            mountPath: /opt/gogs/data
+          - name: config
+            mountPath: /etc/gogs/conf
         dnsPolicy: ClusterFirst
         restartPolicy: Always
-        securityContext: {}
-        terminationGracePeriodSeconds: 30
         volumes:
-        - name: gogs-data
+        - name: home
+          emptyDir: {}
+        - name: data
           persistentVolumeClaim:
             claimName: gogs-data
-        - name: gogs-config
+        - name: config
           configMap:
             name: gogs-config
             items:
@@ -222,7 +225,8 @@ objects:
     - imageChangeParams:
         automatic: true
         containerNames:
-        - ${APPLICATION_NAME}
+        - gogs
+        - init
         from:
           kind: ImageStreamTag
           name: ${APPLICATION_NAME}:${GOGS_VERSION}
@@ -239,7 +243,6 @@ objects:
       from:
         kind: DockerImage
         name: docker.io/openshiftdemos/gogs:${GOGS_VERSION}
-      importPolicy: {}
       annotations:
         description: The Gogs git server docker image
         tags: gogs,go,golang
@@ -251,8 +254,7 @@ objects:
     labels:
       app: ${APPLICATION_NAME}
   spec:
-    accessModes:
-      - ReadWriteOnce
+    accessModes: [ ReadWriteOnce ]
     resources:
       requests:
         storage: ${GOGS_VOLUME_CAPACITY}
@@ -286,11 +288,16 @@ objects:
       USER     = ${DATABASE_USER}
       PASSWD   = ${DATABASE_PASSWORD}
 
+      [log]
+      MODE = console
+      LEVEL = $LOG_LEVEL
+
       [repository]
       ROOT = /opt/gogs/data/repositories
+      PREFERRED_LICENSES = MIT License,Apache License 2.0
 
       [server]
-      ROOT_URL=http://${HOSTNAME}
+      ROOT_URL=https://${HOSTNAME}
       SSH_DOMAIN=${HOSTNAME}
 
       [security]
