@@ -358,3 +358,7 @@ parameters:
   displayName: Skip TLS verification on webhooks
   description: Skip TLS verification on webhooks. Enable with caution!
   value: "false"
+- name: PROXY_HOST
+  value: ""
+- name: PROXY_PORT
+  value: ""
