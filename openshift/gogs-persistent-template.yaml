@@ -78,8 +78,11 @@ objects:
             timeoutSeconds: 1
           resources:
             limits:
-              cpu: 100m
-              memory: 512Mi
+              cpu: ${POSTGRES_CONTAINER_CPU_LIMIT}
+              memory: ${POSTGRES_CONTAINER_MEMORY_LIMIT}
+            requests:
+              cpu: ${POSTGRES_CONTAINER_CPU_REQUEST}
+              memory: ${POSTGRES_CONTAINER_MEMORY_REQUEST}
           volumeMounts:
           - mountPath: /var/lib/pgsql/data
             name: data
@@ -195,9 +198,12 @@ objects:
             successThreshold: 1
             failureThreshold: 10
           resources:
+            limits:
+              cpu: "${GOGS_CPU_LIMIT}"
+              memory: "${GOGS_MEMORY_LIMIT}"
             requests:
-              cpu: 200m
-              memory: 768Mi
+              cpu: "${GOGS_CPU_REQUEST}"
+              memory: "${GOGS_MEMORY_REQUEST}"
           volumeMounts:
           - name: home
             mountPath: /home/gogs
@@ -345,6 +351,26 @@ parameters:
 - displayName: Shared Buffer Amount
   name: DATABASE_SHARED_BUFFERS
   value: 12MB
+- name: GOGS_CPU_LIMIT
+  description: Maximum amount of CPU a Gogs container can use
+  displayName: Gogs CPU Limit
+  required: true
+  value: 300m
+- name: GOGS_CPU_REQUEST
+  description: Reserved amount of CPU a Gogs container can use
+  displayName: Gogs CPU Request
+  required: true
+  value: 100m
+- name: GOGS_MEMORY_LIMIT
+  description: Maximum amount of memory a Gogs container can use
+  displayName: Gogs Memory Limit
+  required: true
+  value: 512Mi
+- name: GOGS_MEMORY_REQUEST
+  description: Reserved amount of memory a Gogs container can use
+  displayName: Gogs Memory Request
+  required: true
+  value: 512Mi
 - name: GOGS_VERSION
   displayName: Gogs Version
   description: 'Version of the Gogs container image to be used (check the available version https://hub.docker.com/r/openshiftdemos/gogs/tags)'
@@ -354,6 +380,22 @@ parameters:
   displayName: Installation lock
   description: 'If set to true, installation (/install) page will be disabled. Set to false if you want to run the installation wizard via web'
   value: "true"
+- description: Postgres Container Memory size limit
+  displayName: Postgres Container Memory size limit
+  name: POSTGRES_CONTAINER_MEMORY_LIMIT
+  value: 768Mi
+- description: Postgres Container Memory size request
+  displayName: Postgres Container Memory size request
+  name: POSTGRES_CONTAINER_MEMORY_REQUEST
+  value: 128Mi
+- description: Postgres Container CPU limit
+  displayName: Postgres Container CPU limit
+  name: POSTGRES_CONTAINER_CPU_LIMIT
+  value: 200m
+- description: Postgres Container CPU request
+  displayName: Postgres Container CPU request
+  name: POSTGRES_CONTAINER_CPU_REQUEST
+  value: 50m
 - name: SKIP_TLS_VERIFY
   displayName: Skip TLS verification on webhooks
   description: Skip TLS verification on webhooks. Enable with caution!
