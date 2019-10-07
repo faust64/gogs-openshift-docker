@@ -163,7 +163,7 @@ objects:
         - command:
           - /bin/sh
           - '-c'
-          - 'if test "${PROXY_HOST}"; then ( echo [http] && echo proxy = http://${PROXY_HOST}:${PROXY_PORT} && echo [https] && echo proxy = http://${PROXY_HOST}:${PROXY_PORT} ) >>/home/gogs/.gitconfig; fi'
+          - 'if test "${PROXY_HOST}"; then ( echo [http] && echo proxy = http://${PROXY_HOST}:${PROXY_PORT} && echo [https] && echo proxy = http://${PROXY_HOST}:${PROXY_PORT}; for r in "${NO_PROXY}"; do echo [http \"$r\"]; echo proxy = \"\" ) >>/home/gogs/.gitconfig; fi'
           image: " "
           imagePullPolicy: IfNotPresent
           name: init
@@ -410,4 +410,6 @@ parameters:
 - name: PROXY_HOST
   value: ""
 - name: PROXY_PORT
+  value: ""
+- name: NO_PROXY
   value: ""
